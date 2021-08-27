@@ -47,6 +47,8 @@ new LosSantosMotors;
 new SanFierroMotors;
 new LasVenturasMotors;
 
+new bool:HasSetCheckpoint[MAX_PLAYERS];
+
 forward SetVehicleParamsForAll(carid, objective, doorslocked);
 
 enum vehicle_data
@@ -119,21 +121,21 @@ stock GetOwnedVehicle(playerid)
 public OnFilterScriptInit()
 {
     vehicle_database = db_open(VEHICLE_DATABASE);
-    
+
     db_query(vehicle_database, "CREATE TABLE IF NOT EXISTS `VEHICLES` (`OWNER`, `MODEL`, `COLOUR1`, `COLOUR2`, `PRICE`, `X`, `Y`, `Z`, `A`, `HEALTH`, `PLATE`, `PAINTJOB`, `LOCKED`)");
-    
+
     CreateDynamicMapIcon(LS_SHOP_X, LS_SHOP_Y, LS_SHOP_Z, 55, -1, -1, -1, -1, 250.0);
     CreateDynamicMapIcon(SF_SHOP_X, SF_SHOP_Y, SF_SHOP_Z, 55, -1, -1, -1, -1, 250.0);
     CreateDynamicMapIcon(LV_SHOP_X, LV_SHOP_Y, LV_SHOP_Z, 55, -1, -1, -1, -1, 250.0);
-    
+
     LosSantosMotors = CreateDynamicCP(LS_SHOP_X, LS_SHOP_Y, LS_SHOP_Z, 3.0, -1, -1, -1, 10.0, -1, 0);
     SanFierroMotors = CreateDynamicCP(SF_SHOP_X, SF_SHOP_Y, SF_SHOP_Z, 3.0, -1, -1, -1, 10.0, -1, 0);
     LasVenturasMotors = CreateDynamicCP(LV_SHOP_X, LV_SHOP_Y, LV_SHOP_Z, 3.0, -1, -1, -1, 10.0, -1, 0);
-    
+
     CreateDynamic3DTextLabel("Los Santos Motors", WHITE, LS_SHOP_X, LS_SHOP_Y, LS_SHOP_Z, 10.0, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 1, -1, -1, -1, 50.0);
     CreateDynamic3DTextLabel("San Fierro Motors", WHITE, SF_SHOP_X, SF_SHOP_Y, SF_SHOP_Z, 10.0, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 1, -1, -1, -1, 50.0);
     CreateDynamic3DTextLabel("Las Venturas Motors", WHITE, LV_SHOP_X, LV_SHOP_Y, LV_SHOP_Z, 10.0, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 1, -1, -1, -1, 50.0);
-    
+
 	for(new v = 0; v < MAX_VEHICLES; v++)
 	{
 	    VehicleInfo[v][vehicle_owned] = false;
@@ -193,6 +195,8 @@ public OnPlayerConnect(playerid)
 			ChangeVehiclePaintjob(vehicleid, VehicleInfo[vehicleid][vehicle_paintjob]);
 		}
 	}
+	HasSetCheckpoint[playerid] = false;
+	
   	db_free_result(database_result);
 	return 1;
 }
@@ -287,7 +291,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	            model = 487;
 	            price = 250000;
 	        }
-	        
+
 	        if(GetOwnedVehicle(playerid) != INVALID_PLAYER_ID) return SendClientMessage(playerid, RED, "SERVER: You already own a vehicle, trade yours in first to buy another one.");
 	        if(GetPlayerMoney(playerid) < price)
 			{
@@ -295,18 +299,18 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			    format(string, sizeof(string), "SERVER: You cannot afford that vehicle, it costs $%d.", price);
 				return SendClientMessage(playerid, RED, string);
 			}
-			
+
 			GivePlayerMoney(playerid, -price);
-			
+
 			new Float:pos[4];
 			GetPlayerPos(playerid, pos[0], pos[1], pos[2]);
 			GetPlayerFacingAngle(playerid, pos[3]);
-			
+
 			new vehicleid = CreateVehicle(model, pos[0], pos[1], pos[2], pos[3], random(255), random(255), -1);
 			SetVehicleNumberPlate(vehicleid, GetName(playerid));
 			SetVehicleToRespawn(vehicleid);
 			SetVehicleHealth(vehicleid, 1000.0);
-			
+
 			PutPlayerInVehicle(playerid, vehicleid, 0);
 
 			VehicleInfo[vehicleid][vehicle_owner] = GetName(playerid);
@@ -323,13 +327,13 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			VehicleInfo[vehicleid][vehicle_price] = price;
 			VehicleInfo[vehicleid][vehicle_locked] = NO;
 			VehicleInfo[vehicleid][vehicle_owned] = true;
-			
+
 			new query[400];
 			format(query, sizeof(query), "INSERT INTO `VEHICLES` (`OWNER`, `MODEL`, `COLOUR1`, `COLOUR2`, `PRICE`, `X`, `Y`, `Z`, `A`, `HEALTH`, `PLATE`, `PAINTJOB`, `LOCKED`) VALUES ('%s', '%d', '%d', '%d', '%d', '%f', '%f', '%f', '%f', '%f', '%s', '%d', '%d')",
 			DB_Escape(GetName(playerid)), VehicleInfo[vehicleid][vehicle_model], VehicleInfo[vehicleid][vehicle_colour1], VehicleInfo[vehicleid][vehicle_colour2], VehicleInfo[vehicleid][vehicle_price], VehicleInfo[vehicleid][vehicle_x], VehicleInfo[vehicleid][vehicle_y], VehicleInfo[vehicleid][vehicle_z], VehicleInfo[vehicleid][vehicle_a], VehicleInfo[vehicleid][vehicle_health], VehicleInfo[vehicleid][vehicle_plate], VehicleInfo[vehicleid][vehicle_paintjob], VehicleInfo[vehicleid][vehicle_locked]);
 			database_result = db_query(vehicle_database, query);
 			db_free_result(database_result);
-			
+
 			new string[128];
 			format(string, sizeof(string), "SERVER: You have successfully purchased the vehicle for: $%d", price);
 			SendClientMessage(playerid, WHITE, string);
@@ -358,23 +362,23 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 							if(!strcmp(GetName(playerid), VehicleInfo[v][vehicle_owner], false))
 							{
 							    DestroyVehicle(v);
-							    
+
 							    format(query, sizeof(query), "DELETE FROM `VEHICLES` WHERE `OWNER` = '%s' COLLATE NOCASE", DB_Escape(GetName(playerid)));
 								database_result = db_query(vehicle_database, query);
 								db_free_result(database_result);
-							    
+
 							    VehicleInfo[v][vehicle_owned] = false;
-							    
+
 							    new cash = VehicleInfo[v][vehicle_price] / 2;
 							    GivePlayerMoney(playerid, cash);
-							    
+
 							    format(string, sizeof(string), "SERVER: You have just traded in your vehicle for: $%d", cash);
 							    return SendClientMessage(playerid, WHITE, string);
 							}
 						}
 					}
 				}
-				
+
 				SendClientMessage(playerid, RED, "SERVER: You must be next to your vehicle to use this function.");
 	        }
 	    }
@@ -502,11 +506,11 @@ public OnVehicleDeath(vehicleid, killerid)
 	if(VehicleInfo[vehicleid][vehicle_owned] == true)
 	{
 	    DestroyVehicle(vehicleid);
-	    
+
 		new veh = CreateVehicle(VehicleInfo[vehicleid][vehicle_model], VehicleInfo[vehicleid][vehicle_x], VehicleInfo[vehicleid][vehicle_y], VehicleInfo[vehicleid][vehicle_z], VehicleInfo[vehicleid][vehicle_a], VehicleInfo[vehicleid][vehicle_colour1], VehicleInfo[vehicleid][vehicle_colour2], -1);
         SetVehicleNumberPlate(veh, VehicleInfo[vehicleid][vehicle_plate]);
 		SetVehicleToRespawn(veh);
-		
+
 		VehicleInfo[veh][vehicle_owner] = VehicleInfo[vehicleid][vehicle_owner];
 		VehicleInfo[veh][vehicle_model] = VehicleInfo[vehicleid][vehicle_model];
 		VehicleInfo[veh][vehicle_x] = VehicleInfo[vehicleid][vehicle_x];
@@ -525,12 +529,12 @@ public OnVehicleDeath(vehicleid, killerid)
 		VehicleInfo[veh][vehicle_health] = 1000.0;
 
 		SetVehicleHealth(veh, VehicleInfo[veh][vehicle_health]);
-		
+
 		if(VehicleInfo[veh][vehicle_paintjob] != 0)
 		{
 			ChangeVehiclePaintjob(veh, VehicleInfo[veh][vehicle_paintjob]);
 		}
-		
+
 		if(VehicleInfo[veh][vehicle_locked] == YES)
 		{
 			SetVehicleParamsForAll(veh, 0, 1);
@@ -593,20 +597,44 @@ public OnVehicleStreamOut(vehicleid, forplayerid)
 	return 1;
 }
 
+public OnPlayerEnterCheckpoint(playerid)
+{
+	if(HasSetCheckpoint[playerid] == true)
+ 	{
+    	DisablePlayerCheckpoint(playerid);
+    	HasSetCheckpoint[playerid] = false;
+    }
+    return 1;
+}
+
+CMD:locveh(playerid, params[])
+{
+	new vehicleid = GetOwnedVehicle(playerid), Float:pos[3];
+    if(vehicleid == INVALID_VEHICLE_ID) return SendClientMessage(playerid, RED, "SERVER: You must own a vehicle to use this command.");
+
+	GetVehiclePos(vehicleid, pos[0], pos[1], pos[2]);
+	
+	SetPlayerCheckpoint(playerid, pos[0], pos[1], pos[2], 10.0);
+	
+	HasSetCheckpoint[playerid] = true;
+	
+	GameTextForPlayer(playerid, "~g~Set", 3000, 5);
+	return 1;
+}
 
 CMD:park(playerid, params[])
 {
 	new vehicleid = GetPlayerVehicleID(playerid), Float:pos[4];
 	if(!IsPlayerInAnyVehicle(playerid) || vehicleid != GetOwnedVehicle(playerid)) return SendClientMessage(playerid, RED, "You must be in an owned vehicle to use this command.");
-	
+
 	GetVehiclePos(GetOwnedVehicle(playerid), pos[0], pos[1], pos[2]);
 	GetVehicleZAngle(GetOwnedVehicle(playerid), pos[3]);
-	
+
 	VehicleInfo[GetOwnedVehicle(playerid)][vehicle_x] = pos[0];
 	VehicleInfo[GetOwnedVehicle(playerid)][vehicle_y] = pos[1];
 	VehicleInfo[GetOwnedVehicle(playerid)][vehicle_z] = pos[2];
 	VehicleInfo[GetOwnedVehicle(playerid)][vehicle_a] = pos[3];
-	
+
 	GameTextForPlayer(playerid, "~g~Parked", 3000, 5);
 	return 1;
 }
@@ -618,11 +646,11 @@ CMD:lock(playerid, params[])
 
 	GetVehiclePos(vehicleid, pos[0], pos[1], pos[2]);
 	if(!IsPlayerInRangeOfPoint(playerid, 10.0, pos[0], pos[1], pos[2])) return SendClientMessage(playerid, RED, "SERVER: You must be next to your owned vehicle to use this command.");
-	
+
 	if(VehicleInfo[vehicleid][vehicle_locked] == NO)
 	{
 	    VehicleInfo[vehicleid][vehicle_locked] = YES;
-	    
+
 		SetVehicleParamsForAll(vehicleid, 0, 1);
         GetVehicleParamsEx(vehicleid, engine, lights, alarm, doors, bonnet, boot, condition);
 		SetVehicleParamsEx(vehicleid, engine, lights, alarm, ON, bonnet, boot, condition);
